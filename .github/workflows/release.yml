@@ -1,5 +1,19 @@
 name: release
 
+# Stages a release on every v* tag push — it does NOT publish it live. A
+# maintainer must separately run `npm stage approve <stage-id> --otp <code>`
+# (or approve it on npmjs.com's Staged Packages tab) to finish the release.
+# This is deliberate: the NPM_TOKEN this job uses is a "stage only" granular
+# token that cannot publish directly, by design — npm is deprecating
+# bypass-2FA direct-publish tokens (removed entirely in Jan 2027), and a
+# compromised CI secret alone should never be able to ship a live release
+# without a human, 2FA-authenticated, in the loop.
+#
+# NOTE: staged publishing only works for a package that already exists on
+# the registry — the very first release of a new package must be published
+# manually (`npm publish`, from an npm login with 2FA) before this workflow
+# can stage anything.
+
 on:
   push:
     tags:
@@ -7,10 +21,10 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for npm provenance attestation
+  id-token: write # for npm provenance attestation, if/once confirmed supported on `npm stage publish`
 
 jobs:
-  publish:
+  stage:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +40,7 @@ jobs:
       - run: npm run build
 
       # Fails loudly if the tag and package.json version have drifted —
-      # better than publishing the wrong version silently.
+      # better than staging the wrong version silently.
       - name: verify tag matches package.json version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
@@ -36,6 +50,10 @@ jobs:
             exit 1
           fi
 
-      - run: npm publish --provenance --access public
+      - name: stage the release (no 2FA required — this step cannot publish live)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm stage publish --access public | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Staged, not live.** Run \`npm stage list isthmus-scan\` to find the stage id, then \`npm stage approve <stage-id> --otp <code>\` (2FA required) to finish this release — or approve it from npmjs.com's Staged Packages tab." >> "$GITHUB_STEP_SUMMARY"
