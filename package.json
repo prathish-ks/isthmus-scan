@@ -4,7 +4,7 @@
   "description": "A free, read-only hardening scanner for NanoClaw installs.",
   "type": "module",
   "bin": {
-    "isthmus-scan": "./dist/index.js"
+    "isthmus-scan": "dist/index.js"
   },
   "files": [
     "dist"

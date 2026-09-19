@@ -12,7 +12,7 @@ Run [isthmus-scan](https://github.com/prathish-ks/isthmus-scan) against this che
 From the root of this NanoClaw checkout:
 
 ```bash
-npx --yes github:prathish-ks/isthmus-scan --json
+npx --yes isthmus-scan --json
 ```
 
 This is read-only — it opens files that already exist and makes one short local socket probe if this looks like an Isthmus checkout. Nothing is written, nothing leaves the machine.

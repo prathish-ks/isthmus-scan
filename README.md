@@ -3,7 +3,7 @@
 Run one command, find out what your NanoClaw agents can actually reach on your machine — not what you assumed they could reach.
 
 ```bash
-npx github:prathish-ks/isthmus-scan /path/to/your/nanoclaw
+npx isthmus-scan /path/to/your/nanoclaw
 ```
 
 Free, read-only, no signup, nothing leaves your machine. The whole tool is a few hundred lines across `src/`, one file per check — short enough to read before you run it, which is the point for something making claims about your machine's security.
@@ -23,11 +23,13 @@ Clean scan? Now you know for sure instead of assuming. Something flagged? You ge
 ## Usage
 
 ```bash
-npx github:prathish-ks/isthmus-scan                    # scan the current directory
-npx github:prathish-ks/isthmus-scan /path/to/nanoclaw   # scan a specific checkout
-npx github:prathish-ks/isthmus-scan --json              # machine-readable output
-npx github:prathish-ks/isthmus-scan --allowlist=<path>  # override the mount-allowlist location
+npx isthmus-scan                    # scan the current directory
+npx isthmus-scan /path/to/nanoclaw  # scan a specific checkout
+npx isthmus-scan --json             # machine-readable output
+npx isthmus-scan --allowlist=<path> # override the mount-allowlist location
 ```
+
+Prefer to run straight from source instead of the npm registry? `npx github:prathish-ks/isthmus-scan` works the same way, and `npx github:prathish-ks/isthmus-scan#v0.1.0` pins an exact tagged version.
 
 Exit code is non-zero only if something actually failed — an `INFO` or a clean pass never fails the exit code, so this is safe to wire into a script or CI check.
 
