@@ -31,6 +31,18 @@ npx github:prathish-ks/isthmus-scan --allowlist=<path>  # override the mount-all
 
 Exit code is non-zero only if something actually failed — an `INFO` or a clean pass never fails the exit code, so this is safe to wire into a script or CI check.
 
+## Using it as a Claude Code skill
+
+If you use Claude Code with your NanoClaw checkout, copy `.claude/skills/isthmus-scan/` from this repo into your own checkout's `.claude/skills/`:
+
+```bash
+curl -sL https://github.com/prathish-ks/isthmus-scan/archive/refs/heads/main.tar.gz | \
+  tar -xz --strip-components=3 -C /path/to/your/nanoclaw/.claude/skills/isthmus-scan \
+  isthmus-scan-main/.claude/skills/isthmus-scan
+```
+
+(Or just download the folder from GitHub.) Then ask your agent to run the scan — it reads the same JSON output as the CLI, explains each finding, and offers to fix what's actually fixable (never silently).
+
 ## What this is not
 
 This is not a claim that installing anything fixes everything it finds. Two of the checks above — mount-allowlist and egress — are things [Isthmus](https://github.com/prathish-ks/isthmus)'s Go kernel continuously enforces at the request boundary if you run it; the non-root check is just confirming a NanoClaw default hasn't drifted, and Isthmus doesn't change that either way. The report says which is which.
