@@ -1,6 +1,6 @@
 {
   "name": "isthmus-scan",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A free, read-only hardening scanner for NanoClaw installs.",
   "type": "module",
   "bin": {
