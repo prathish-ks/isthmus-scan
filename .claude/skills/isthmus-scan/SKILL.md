@@ -15,7 +15,9 @@ From the root of this NanoClaw checkout:
 npx --yes isthmus-scan --json
 ```
 
-This is read-only — it opens files that already exist and makes one short local socket probe if this looks like an Isthmus checkout. Nothing is written, nothing leaves the machine.
+This is read-only. It opens files that already exist, makes one short local socket probe if this looks like an Isthmus checkout, and asks the local Docker daemon to describe what it already has (`info`, `ps`, `inspect`). Nothing is written, no container is created or executed, nothing leaves the machine — the tool enforces that with an allowlist rather than just claiming it. Add `--no-docker` if the user would rather it didn't touch the daemon at all.
+
+A check that needs Docker reports `skip` when the daemon isn't answering. Report that as "not looked at", never as a pass.
 
 Parse the JSON `checks` array. Each entry has `name`, `level` (`pass` | `warn` | `fail` | `info` | `skip`), `detail`, an optional `remediation`, and `enforcement`.
 
@@ -43,7 +45,11 @@ Never edit a file without the user's explicit go-ahead. For each `fail`/`warn`, 
 
 **`install-script allowlist`** — the `detail` names the packages added beyond upstream's set. Each runs arbitrary code during `pnpm install`. Ask the user whether each was deliberately reviewed; never add an entry yourself, which `docs/SECURITY.md` prohibits outright for automated agents.
 
-**`agent-image pin`** — the image is pinned by a tag that can be repointed. Offer to resolve it to a digest (`docker image inspect <image> --format '{{index .RepoDigests 0}}'`) and pin that in `versions.json`. This changes what their machine executes, so confirm before editing.
+**`agent-image pin`** — the image is pinned by a tag that can be repointed. If Docker was reachable the `detail` already names the digest that tag resolves to locally, and the `remediation` is the exact line to put in `versions.json`. This changes what their machine executes, so confirm before editing.
+
+**`egress-lockdown wiring`** — read the `detail` carefully before offering anything, because the fixes differ completely. A missing or non-`--internal` network means the host should recreate it; a conflicting `NANOCLAW_KERNEL_DOCKER_NETWORK` is an env fix; agent containers on the wrong network means the attach path is broken and the host needs restarting, which is not something to do without asking. If the level is `warn` with "inconclusive", do not present it as a leak — those sessions have a sibling container that legitimately explains a bridge attachment, and the honest answer is that a person should look.
+
+**`container runtime class`** — if this is the `warn` (a hardened runtime installed but not the default), the fix is the daemon's `default-runtime` in `daemon.json`, which is outside the NanoClaw checkout and affects every container on the machine. Explain it; never edit it. If it `pass`es saying no hardened runtime is available, do not present that as a gap to close — it is the expected default and neither project promises otherwise.
 
 **`Isthmus kernel liveness`** (only appears if this is an Isthmus checkout) — the kernel is installed but not answering on any of the paths listed in the `detail`. Suggest starting the host normally, or running `nanogo doctor` for the full diagnostic. Don't attempt to start it yourself without asking. If `migrationState` is `migrated-not-enforcing` right after an install, say plainly that this is expected until the host has run once — it is not a broken migration.
 

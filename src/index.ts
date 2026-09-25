@@ -3,10 +3,17 @@
  * isthmus-scan — a free, read-only hardening scanner for NanoClaw installs.
  * https://github.com/prathish-ks/isthmus-scan
  *
- * Every check here is read-only: it opens files that already exist and, for
- * the Isthmus kernel-liveness check, makes one short-timeout local socket
- * connection. Nothing is written, nothing leaves your machine, no network
- * calls beyond that local socket probe.
+ * Every check here is read-only. Most open files that already exist. The
+ * kernel-liveness check makes one short-timeout local socket connection. The
+ * rest ask the local Docker daemon what it already knows — `docker info`,
+ * `docker ps`, `docker inspect` — which is how this tool can tell "lockdown is
+ * configured" apart from "lockdown is happening". That read-only boundary is
+ * enforced, not just promised: see src/docker.ts's allowlist, which refuses
+ * any subcommand that could change something.
+ *
+ * Nothing is written, no container is created or executed, and nothing leaves
+ * your machine. `--no-docker` skips the daemon entirely if you would rather it
+ * did not look.
  */
 import { createRequire } from 'module';
 import path from 'path';
@@ -16,7 +23,10 @@ import { checkNonRoot } from './checks/non-root.js';
 import { checkEgressExposure } from './checks/egress.js';
 import { checkReleaseAgeGate, checkInstallScriptAllowlist } from './checks/supply-chain.js';
 import { checkAgentImagePin } from './checks/agent-image.js';
+import { checkEgressLockdownWiring } from './checks/egress-lockdown.js';
+import { checkRuntimeClass } from './checks/runtime-class.js';
 import { detectIsthmus, checkKernelLiveness } from './checks/isthmus-mode.js';
+import { RealDockerRunner, type DockerRunner } from './docker.js';
 import { compareReports, formatComparisonHuman, loadBaseline } from './compare.js';
 import { formatReportHuman, type CheckResult, type MigrationState, type ScanReport } from './report.js';
 
@@ -49,6 +59,7 @@ async function main(): Promise<void> {
   }
 
   const json = args.includes('--json');
+  const noDocker = args.includes('--no-docker');
   const comparePath = flagValue(args, 'compare');
   const allowlistPath = flagValue(args, 'allowlist') ?? defaultAllowlistPath();
 
@@ -56,6 +67,13 @@ async function main(): Promise<void> {
   const consumed = new Set([comparePath, args.includes('--allowlist') ? allowlistPath : undefined]);
   const positional = args.find((a) => !a.startsWith('-') && !consumed.has(a));
   const target = path.resolve(positional ?? process.cwd());
+
+  // A runner that reports itself unavailable makes every Docker-dependent
+  // check report `skip` through its own normal path, so --no-docker needs no
+  // special-casing anywhere else.
+  const docker: DockerRunner = noDocker
+    ? { available: () => false, run: () => ({ ok: false, stdout: '', stderr: '--no-docker' }) }
+    : new RealDockerRunner();
 
   const isthmusDetected = detectIsthmus(target);
 
@@ -75,9 +93,11 @@ async function main(): Promise<void> {
     checkMountAllowlist(allowlistPath, kernelEnforcing),
     checkNonRoot(target),
     checkEgressExposure(kernelEnforcing),
+    checkEgressLockdownWiring(target, docker),
+    checkRuntimeClass(docker),
     checkReleaseAgeGate(target),
     checkInstallScriptAllowlist(target),
-    checkAgentImagePin(target),
+    checkAgentImagePin(target, docker),
   ];
   if (kernelCheck) checks.push(kernelCheck);
 
@@ -117,15 +137,18 @@ async function main(): Promise<void> {
 function printUsage(): void {
   process.stdout.write(
     [
-      'Usage: isthmus-scan [path] [--json] [--allowlist=<path>] [--compare=<baseline.json>]',
+      'Usage: isthmus-scan [path] [--json] [--allowlist=<path>] [--compare=<baseline.json>] [--no-docker]',
       '',
       '  path                  NanoClaw checkout to scan (default: current directory)',
       '  --json                machine-readable output',
       "  --allowlist=<path>    override the mount-allowlist.json location (default: ~/.config/nanoclaw/mount-allowlist.json)",
       '  --compare=<file>      diff this scan against a baseline written earlier with --json',
+      '  --no-docker           skip every check that asks the Docker daemon',
       '  --version             print the version and exit',
       '',
-      'Read-only. Nothing is written, nothing leaves your machine.',
+      'Read-only. Nothing is written, no container is created or executed, nothing',
+      'leaves your machine. Docker is only ever asked to describe what it already',
+      'has (info, ps, inspect) — see src/docker.ts for the enforced allowlist.',
       '',
       'Before/after a migration to Isthmus:',
       '  isthmus-scan --json > before.json',
