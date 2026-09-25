@@ -26,7 +26,7 @@ export function checkNonRoot(target: string): CheckResult {
       name,
       level: 'skip',
       detail: `no Dockerfile found under ${target} — is this a NanoClaw checkout?`,
-      isthmusEnforced: false,
+      enforcement: 'unenforced',
     };
   }
 
@@ -44,7 +44,7 @@ export function checkNonRoot(target: string): CheckResult {
       level: 'fail',
       detail: `${dockerfilePath} has no USER directive — Docker defaults to root when none is set`,
       remediation: 'add a non-root USER directive before the image is built',
-      isthmusEnforced: false,
+      enforcement: 'unenforced',
     };
   }
 
@@ -54,7 +54,7 @@ export function checkNonRoot(target: string): CheckResult {
       level: 'fail',
       detail: `${dockerfilePath}'s last USER directive is '${lastUser}' — agent containers run as root`,
       remediation: 'switch back to a non-root user (NanoClaw ships this as USER node by default)',
-      isthmusEnforced: false,
+      enforcement: 'unenforced',
     };
   }
 
@@ -62,6 +62,6 @@ export function checkNonRoot(target: string): CheckResult {
     name,
     level: 'pass',
     detail: `${dockerfilePath} runs as '${lastUser}', not root`,
-    isthmusEnforced: false,
+    enforcement: 'nanoclaw-native',
   };
 }

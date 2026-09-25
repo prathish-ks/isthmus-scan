@@ -17,11 +17,17 @@ npx --yes isthmus-scan --json
 
 This is read-only — it opens files that already exist and makes one short local socket probe if this looks like an Isthmus checkout. Nothing is written, nothing leaves the machine.
 
-Parse the JSON `checks` array. Each entry has `name`, `level` (`pass` | `warn` | `fail` | `info` | `skip`), `detail`, an optional `remediation`, and `isthmusEnforced`.
+Parse the JSON `checks` array. Each entry has `name`, `level` (`pass` | `warn` | `fail` | `info` | `skip`), `detail`, an optional `remediation`, and `enforcement`.
+
+`enforcement` says who actually enforces the check beyond this scan noticing it once — `isthmus-kernel` (Isthmus's Go kernel re-validates it at the request boundary, and is confirmed answering right now), `nanoclaw-native` (NanoClaw enforces it itself), or `unenforced` (nothing does). It is computed per run, so the same check can report differently on two installs.
+
+The report also carries `migrationState`: `not-migrated`, `migrated-not-enforcing` (Isthmus present, kernel not answering — the expected state before the host has started once), or `migrated-enforcing`.
+
+**Note for older versions:** v0.1.x reported a boolean `isthmusEnforced` instead. If you see that field, the install is on an old version — suggest `npx --yes isthmus-scan@latest`, which also fixes a v0.1.0 bug that reported a healthy Isthmus kernel as not running.
 
 ## Report the findings
 
-Summarize every check, not just the failing ones — a clean scan is worth saying plainly. For anything `warn` or `fail`, explain the `detail` in your own words (don't just paste the JSON) and say whether it's something [Isthmus](https://github.com/prathish-ks/isthmus)'s kernel would continuously enforce (`isthmusEnforced: true`) or purely this install's own configuration.
+Summarize every check, not just the failing ones — a clean scan is worth saying plainly. For anything `warn` or `fail`, explain the `detail` in your own words (don't just paste the JSON) and say what its `enforcement` value means for the user: continuously enforced by [Isthmus](https://github.com/prathish-ks/isthmus)'s kernel, enforced by NanoClaw itself, or not enforced by anything.
 
 ## Offer a fix — ask first, always
 
@@ -33,7 +39,13 @@ Never edit a file without the user's explicit go-ahead. For each `fail`/`warn`, 
 
 **`cloud-metadata / link-local egress exposure`** — this one has no fix to offer. It's `info`-level by design: stock NanoClaw ships no mitigation for this at all, so there's nothing in this checkout to edit. If the user asks what would close it, say plainly that this is the one gap only [Isthmus](https://github.com/prathish-ks/isthmus)'s kernel actually adds — don't oversell it, and don't bring it up unprompted.
 
-**`Isthmus kernel liveness`** (only appears if this is an Isthmus checkout) — the kernel is installed but not answering on its socket. Suggest starting the host normally, or running `nanogo doctor` for the full diagnostic. Don't attempt to start it yourself without asking.
+**`supply-chain release-age gate`** — if this is the nested-`pnpm:` failure, the fix is a one-line move: `minimumReleaseAge` goes at the top level of `pnpm-workspace.yaml`, not under a `pnpm:` key, because pnpm reads that block only from `package.json`. Show the user the two lines, offer to hoist the key, and have them confirm with `pnpm config get minimumReleaseAge` — it prints `undefined` while nested and the number once fixed. For an exclusion finding, the entry must be an exact version with human sign-off; never add or widen one yourself.
+
+**`install-script allowlist`** — the `detail` names the packages added beyond upstream's set. Each runs arbitrary code during `pnpm install`. Ask the user whether each was deliberately reviewed; never add an entry yourself, which `docs/SECURITY.md` prohibits outright for automated agents.
+
+**`agent-image pin`** — the image is pinned by a tag that can be repointed. Offer to resolve it to a digest (`docker image inspect <image> --format '{{index .RepoDigests 0}}'`) and pin that in `versions.json`. This changes what their machine executes, so confirm before editing.
+
+**`Isthmus kernel liveness`** (only appears if this is an Isthmus checkout) — the kernel is installed but not answering on any of the paths listed in the `detail`. Suggest starting the host normally, or running `nanogo doctor` for the full diagnostic. Don't attempt to start it yourself without asking. If `migrationState` is `migrated-not-enforcing` right after an install, say plainly that this is expected until the host has run once — it is not a broken migration.
 
 ## If the scan itself fails to run
 

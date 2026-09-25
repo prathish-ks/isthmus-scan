@@ -165,7 +165,7 @@ export async function checkKernelLiveness(target: string): Promise<CheckResult> 
       name,
       level: 'pass',
       detail: `kernel socket at ${candidate.path} is reachable${legacyNote} — the mount-allowlist and egress checks above are being actively enforced, not just configured`,
-      isthmusEnforced: true,
+      enforcement: 'isthmus-kernel',
     };
   }
 
@@ -180,6 +180,6 @@ export async function checkKernelLiveness(target: string): Promise<CheckResult> 
     detail: `no kernel socket answered — this looks like an Isthmus checkout, but the kernel doesn't appear to be running, so nothing above is actually being enforced right now. Probed:\n    ${probed}`,
     remediation:
       'start NanoClaw normally (the host spawns `nanogo serve` as a supervised child), or run `nanogo doctor` for a full diagnostic',
-    isthmusEnforced: true,
+    enforcement: 'isthmus-kernel',
   };
 }

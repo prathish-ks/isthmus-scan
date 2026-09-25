@@ -25,7 +25,9 @@ describe('checkMountAllowlist', () => {
   it('warns when no allowlist file exists', () => {
     const result = checkMountAllowlist(path.join(dir, 'missing.json'));
     expect(result.level).toBe('warn');
-    expect(result.isthmusEnforced).toBe(true);
+    // NanoClaw vets this file itself; the kernel only takes over once it is enforcing.
+    expect(result.enforcement).toBe('nanoclaw-native');
+    expect(checkMountAllowlist(path.join(dir, 'missing.json'), true).enforcement).toBe('isthmus-kernel');
   });
 
   it('fails to parse invalid JSON', () => {

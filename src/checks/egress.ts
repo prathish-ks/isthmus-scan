@@ -8,17 +8,17 @@
  */
 import type { CheckResult } from '../report.js';
 
-export function checkEgressExposure(isthmusDetected: boolean): CheckResult {
+export function checkEgressExposure(kernelEnforcing: boolean): CheckResult {
   const name = 'cloud-metadata / link-local egress exposure';
 
-  if (isthmusDetected) {
+  if (kernelEnforcing) {
     return {
       name,
       level: 'info',
       detail:
         'Isthmus adds a firewall rule blocking agent-container access to cloud-metadata and link-local addresses (e.g. 169.254.169.254) — a standard way a compromised container steals cloud credentials.',
       remediation: 'run `nanogo doctor` to verify the rule is actually active on this machine, not just configured',
-      isthmusEnforced: true,
+      enforcement: 'isthmus-kernel',
     };
   }
 
@@ -27,6 +27,6 @@ export function checkEgressExposure(isthmusDetected: boolean): CheckResult {
     level: 'info',
     detail:
       'stock NanoClaw has no built-in mitigation for agent containers reaching cloud-metadata or link-local addresses (e.g. 169.254.169.254) — a standard way a compromised container steals cloud credentials. This is not a live probe of your firewall; it is a statement about what NanoClaw does and does not ship by default.',
-    isthmusEnforced: true,
+    enforcement: 'unenforced',
   };
 }

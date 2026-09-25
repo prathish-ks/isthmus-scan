@@ -6,25 +6,55 @@
  */
 export type Level = 'pass' | 'warn' | 'fail' | 'info' | 'skip';
 
+/**
+ * Who, if anyone, actually enforces this beyond this scan noticing it once.
+ *
+ * Replaces v0.1.x's `isthmusEnforced: boolean`, which could not express the
+ * common case: a gate NanoClaw enforces perfectly well on its own, with
+ * Isthmus nowhere in the picture. Worse, a boolean forced every check to
+ * pick a side at authoring time, when for most of them the honest answer
+ * depends on what the scan actually found — a digest pin is enforced by
+ * Docker, a floating tag is enforced by nobody, and that is the finding.
+ *
+ * This is deliberately computed per run, not hardcoded per check.
+ */
+export type Enforcement =
+  /** Isthmus's Go kernel re-validates this at the request boundary, continuously. */
+  | 'isthmus-kernel'
+  /** NanoClaw itself enforces it — at spawn, at install, or via the container runtime. */
+  | 'nanoclaw-native'
+  /** Nothing enforces it. This scan reading the file is the only check there is. */
+  | 'unenforced';
+
 export interface CheckResult {
   name: string;
   level: Level;
   detail: string;
   remediation?: string;
-  /**
-   * true when Isthmus's Go kernel continuously enforces this at the request
-   * boundary, not merely something this scan happened to notice once. Only
-   * set on checks that are actually wired into the kernel's live dispatch
-   * path (mount-allowlist re-validation, egress blocking) — never claimed
-   * for a check that's really a NanoClaw-native default or convention.
-   */
-  isthmusEnforced: boolean;
+  enforcement: Enforcement;
 }
+
+/**
+ * How far along a NanoClaw → Isthmus migration this checkout is. A plain
+ * boolean "is this Isthmus" reported a half-migrated install — cloned, Go
+ * kernel never built or never started — identically to a broken one, which
+ * is the least useful moment to be vague.
+ */
+export type MigrationState =
+  /** No go-host/. Plain NanoClaw; every NanoClaw-native check still applies. */
+  | 'not-migrated'
+  /** go-host/ present, but nothing is answering on the kernel socket yet. */
+  | 'migrated-not-enforcing'
+  /** The kernel socket answers — config checks are valid AND continuously enforced. */
+  | 'migrated-enforcing';
 
 export interface ScanReport {
   generatedAt: string;
+  /** isthmus-scan's own version, so a --compare baseline says what produced it. */
+  toolVersion: string;
   target: string;
   isthmusDetected: boolean;
+  migrationState: MigrationState;
   checks: CheckResult[];
 }
 
@@ -36,14 +66,19 @@ const LEVEL_LABEL: Record<Level, string> = {
   skip: 'SKIP',
 };
 
+const MIGRATION_FOOTER: Record<MigrationState, string> = {
+  'not-migrated': '',
+  'migrated-not-enforcing':
+    "Isthmus is present at this path but its kernel isn't answering, so nothing above is being enforced at the request boundary yet. That's the expected state before the host has started once — the configuration findings above are still accurate either way.",
+  'migrated-enforcing':
+    'Isthmus detected and its kernel is answering — the checks marked as kernel-enforced above are being actively enforced, not just configured.',
+};
+
 export function formatReportHuman(report: ScanReport): string {
   const lines: string[] = [];
-  lines.push(`isthmus-scan — ${report.target}`);
+  lines.push(`isthmus-scan ${report.toolVersion} — ${report.target}`);
   lines.push(report.generatedAt);
   lines.push('');
-
-  const enforced = report.checks.filter((c) => c.isthmusEnforced);
-  const own = report.checks.filter((c) => !c.isthmusEnforced);
 
   for (const c of report.checks) {
     lines.push(`[${LEVEL_LABEL[c.level]}] ${c.name}`);
@@ -56,24 +91,34 @@ export function formatReportHuman(report: ScanReport): string {
   lines.push(`${failing.length} of ${report.checks.length} checks need attention.`);
 
   if (failing.length > 0) {
+    const byEnforcement = (e: Enforcement) => failing.filter((c) => c.enforcement === e).map((c) => c.name);
+
+    const kernel = byEnforcement('isthmus-kernel');
+    const native = byEnforcement('nanoclaw-native');
+    const unenforced = byEnforcement('unenforced');
+
     lines.push('');
-    const enforcedFailing = enforced.filter((c) => c.level === 'fail' || c.level === 'warn');
-    const ownFailing = own.filter((c) => c.level === 'fail' || c.level === 'warn');
-    if (enforcedFailing.length > 0) {
+    if (kernel.length > 0) {
       lines.push(
-        `${enforcedFailing.length} of these are things Isthmus's kernel continuously enforces at the request boundary (not just re-checked by hand): ${enforcedFailing.map((c) => c.name).join(', ')}.`,
+        `${kernel.length} of these Isthmus's kernel continuously enforces at the request boundary (not just re-checked by hand): ${kernel.join(', ')}.`,
       );
     }
-    if (ownFailing.length > 0) {
+    if (native.length > 0) {
       lines.push(
-        `${ownFailing.length} are your own configuration either way — Isthmus doesn't change these, this scan just helps you see them: ${ownFailing.map((c) => c.name).join(', ')}.`,
+        `${native.length} NanoClaw enforces itself once configured — Isthmus doesn't change these, this scan just helps you see them: ${native.join(', ')}.`,
+      );
+    }
+    if (unenforced.length > 0) {
+      lines.push(
+        `${unenforced.length} nothing is enforcing right now — this scan reading the file is the only check there is: ${unenforced.join(', ')}.`,
       );
     }
   }
 
-  if (report.isthmusDetected) {
+  const footer = MIGRATION_FOOTER[report.migrationState];
+  if (footer) {
     lines.push('');
-    lines.push('Isthmus detected at this path — checks above reflect whether the kernel is actually enforcing, not just installed.');
+    lines.push(footer);
   }
 
   return lines.join('\n');
